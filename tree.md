@@ -1,0 +1,47 @@
+/usr/src/sys/uvm
+|-- uvm.h
+|-- uvm_addr.c
+|-- uvm_addr.h
+|-- uvm_amap.c
+|-- uvm_amap.h
+|-- uvm_anon.c
+|-- uvm_anon.h
+|-- uvm_aobj.c
+|-- uvm_aobj.h
+|-- uvm_ddb.h
+|-- uvm_device.c
+|-- uvm_device.h
+|-- uvm_extern.h
+|-- uvm_fault.c
+|-- uvm_fault.h
+|-- uvm_glue.c
+|-- uvm_glue.h
+|-- uvm_init.c
+|-- uvm_io.c
+|-- uvm_km.c
+|-- uvm_km.h
+|-- uvm_map.c
+|-- uvm_map.h
+|-- uvm_meter.c
+|-- uvm_mmap.c
+|-- uvm_object.c
+|-- uvm_object.h
+|-- uvm_page.c
+|-- uvm_page.h
+|-- uvm_pager.c
+|-- uvm_pager.h
+|-- uvm_param.h
+|-- uvm_pdaemon.c
+|-- uvm_pmap.h
+|-- uvm_pmemrange.c
+|-- uvm_pmemrange.h
+|-- uvm_swap.c
+|-- uvm_swap.h
+|-- uvm_swap_encrypt.c
+|-- uvm_swap_encrypt.h
+|-- uvm_unix.c
+|-- uvm_vnode.c
+|-- uvm_vnode.h
+`-- uvmexp.h
+
+0 directory, 44 files
