@@ -1,5 +1,11 @@
 /usr/src/sys/uvm
-|-- uvm.h
+|-- uvm.h 
+	* Contains global uvm state data
+		- Queue and locks(mutex) for active/inactive and free pages
+		- State for pagedaemon and async io tasks
+		- Bool indicating when init has completed
+		- Entity type bits for indicating properties of map entries
+		- Some uvm_addr decls(unsure if these should be here)
 |-- uvm_addr.c
 |-- uvm_addr.h
 |-- uvm_amap.c
