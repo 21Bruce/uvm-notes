@@ -8,6 +8,21 @@
 		- Some uvm_addr decls(unsure if these should be here)
 |-- uvm_addr.c
 |-- uvm_addr.h
+	* Contains prototypes of uvm addr selector funcs and ds
+		- Addr selectors are different algorithms that decide where
+		  to put addresses. They are defined by a struct containing 
+		  an interface(struct of function pointers) and some state
+		  data(max and min addrs). The interface has a few methods
+		  for selecting, freeing, and printing addresses. There are
+		  4 different selectors atm:
+			1. uaddr_lin: unsure, disabled by default
+			2. uaddr_rnd: random algo addrs
+			3. uaddr_bestfit: bestfit algo addrs
+			4. uaddr_stack_brk: selector for the stack/heap section
+			   (I think)
+		  Also has selectors for kernel bootstrap, which uses an RBTree 
+	          for something.
+		
 |-- uvm_amap.c
 |-- uvm_amap.h
 |-- uvm_anon.c
