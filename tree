@@ -18,11 +18,11 @@
 			1. uaddr_lin: unsure, disabled by default
 			2. uaddr_rnd: random algo addrs
 			3. uaddr_bestfit: bestfit algo addrs
-			4. uaddr_stack_brk: selector for the stack/heap section
+			4. uaddr_pivot: pivot algo addrs(patch this)
+			5. uaddr_stack_brk: selector for the stack/heap section
 			   (I think)
 		  Also has selectors for kernel bootstrap, which uses an RBTree 
 	          for something.
-		
 |-- uvm_amap.c
 |-- uvm_amap.h
 |-- uvm_anon.c
