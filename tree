@@ -50,6 +50,14 @@
     * Contains print functions prototypes for DDB though unsure where those are defined
 |-- uvm_device.c
 |-- uvm_device.h
+    * Contains prototypes of funcs and ds for uvm_device 
+        - uvm_device is a device handle into the VM system.
+            1. u_obj - backign uvm object
+            2. u_flags - flags(I think below) 
+                i. UVM_DEVICE_HOLD      - a process or thread has a hold on the device
+               ii. UVM_DEVICE_WANTED    - a process or thread wants a hold on the device
+            3. u_device - a struct representing the device
+            4. u_list - global list of device objects
 |-- uvm_extern.h
 |-- uvm_fault.c
 |-- uvm_fault.h
