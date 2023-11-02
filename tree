@@ -62,14 +62,14 @@
             4. size - size of space covered by map 
             5. ref_count - # of processes that need this map 
             6. flags 
-                i.    VM_MAP_PAGEABLE      - entries are pageable
-                ii.   VM_MAP_INTRSAFE      - entries are interrupt safe
-                iii.  VM_MAP_WIREFUTURE    - wire future entries 
-                iv.   VM_MAP_BUSY          - map is busy 
-                v.    VM_MAP_WANTLOCK      - want to write-lock 
-                vi.   VM_MAP_GUARDPAGES    - add guard pages to map  
-                vii.  VM_MAP_ISVMSPACE     - map is a vmspace
-                viii. VM_MAP_SYSCALL_ONCE  - libc syscall registered ? 
+                  i. VM_MAP_PAGEABLE      - entries are pageable
+                 ii. VM_MAP_INTRSAFE      - entries are interrupt safe
+                iii. VM_MAP_WIREFUTURE    - wire future entries 
+                 iv. VM_MAP_BUSY          - map is busy 
+                  v. VM_MAP_WANTLOCK      - want to write-lock 
+                 vi. VM_MAP_GUARDPAGES    - add guard pages to map  
+                vii. VM_MAP_ISVMSPACE     - map is a vmspace
+               viii. VM_MAP_SYSCALL_ONCE  - libc syscall registered ? 
             7. timestamp - version number added after each change to signal when
                certain ops must restart 
             8. min/max offset - first and last addr over map entries
@@ -89,6 +89,48 @@
 |-- uvm_object.h
 |-- uvm_page.c
 |-- uvm_page.h
+    * Contains prototypes of vm_page ds and funcs
+        - Vm_pages are data structures kept
+          for pages resident in memory. 
+            1. Each page is an entry in globals: a page tail queue and 
+               a red black tree referred to as the object tree.
+            2. uanon - Anon page for anonymous memory(WHY?)
+            3. uobject - backing object 
+            4. offset - offset into object where page is 
+            5. pg_flags - flags
+                    i. PG_BUSY          - page is locked
+                   ii. PG_WANTED        - page is being waited on 
+                  iii. PG_TABLED        - page is in VP table ? 
+                   iv. PG_CLEAN         - page has not been modified since being paged in 
+                    v. PG_CLEANCHK      - page clean bit has been checked 
+                   vi. PG_RELEASED      - page released while paging 
+                  vii. PG_FAKE          - page is not yet initialized 
+                 viii. PG_RDONLY        - page must be mapped read-only 
+                   ix. PG_ZERO          - page has been zero'd out  
+                    x. PG_DEV           - page is in device space  
+                   xi. PG_PAGER1        - pager specific flag 
+                  xii. PQ_FREE          - page is in free list 
+                 xiii. PQ_INACTIVE      - page is in inactive list 
+                  xiv. PQ_ACTIVE        - page is in active list 
+                   xv. PQ_ANON          - page is part of an anon rather than object 
+                  xvi. PQ_AOBJ          - page is part of an anonymous object 
+                 xvii. PQ_SWAPBACKED    - page is part of anon or anonymous object, i.e. it is
+                                          backed by swap space. 
+                xviii. PQ_ENCRYPT       - page needs encryption and decryption 
+                xviii. PG_PMAPN         - flags reserved for pmaps with N in {0, ..., 5} 
+            6. pg_version - version number incrememnted whenever page is modified
+            7. wire_count - number of processes/threads that need this page wired into memory
+            8. phys_addr - physical address of page
+            9. fpgsz - free page range size 
+           10. mdpage - machine dependent physical map page data
+           11. owner/owner_tag - debugging fields for tracking which thread is using which page
+        - Vm_physseg structures describe a physical memory segment
+            1. start/end - PF# of first and (last + 1) page in segment (PF#?)
+            2. avail_start/avail_end - PF# of first and (last + 1) free page in segment (PF#?)
+            3. pgs - vm_page structures matching each page from the start
+            4. lastpg - vm_page structure matching the last page
+        - Vm_page_zero_enable ?(defined externally)
+        - Vm_physmem ?(defined externally)
 |-- uvm_pager.c
 |-- uvm_pager.h
 |-- uvm_param.h
