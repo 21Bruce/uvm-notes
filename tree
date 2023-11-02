@@ -20,13 +20,25 @@
 			3. uaddr_bestfit: bestfit algo addrs
 			4. uaddr_pivot: pivot algo addrs(patch this)
 			5. uaddr_stack_brk: selector for the stack/heap section
-			   (I think)
 		  Also has selectors for kernel bootstrap, which uses an RBTree 
-	          for something.
+	      for something.
 |-- uvm_amap.c
 |-- uvm_amap.h
 |-- uvm_anon.c
 |-- uvm_anon.h
+    * Contains prototypes of uvm anon and aref funcs and ds. The data can be in the
+      following states. (1) in a vm_page with no backing store allocated yet, (2)
+      in a vm_page with backing store, or (3) paged out to backing store with no
+      vm_page in RAM
+        - Vm_anon is a structure used to described a page of anonymous(short term)
+          memory that will go away when processes are done referencing it
+            1. an_lock - rwlock protectnig this anon
+            2. an_page - vm_page backing this anon if it is in ram 
+            3. an_ref - # of processes referencing this anon 
+            4. an_swslot - Drum swap slot # ??? 
+        - Vm_aref is used to reference an anonymous virtual memory map(amap.h)  
+            1. ar_pageoff - page offset into the anonymous map
+            2. ar_amap - the backing amap 
 |-- uvm_aobj.c
 |-- uvm_aobj.h
 |-- uvm_ddb.h
