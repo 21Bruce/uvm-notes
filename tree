@@ -44,6 +44,8 @@
             2. ar_amap - the backing amap 
 |-- uvm_aobj.c
 |-- uvm_aobj.h
+    * Contains prototypes for a uvm anonymous object funcs, which is a backing object
+      for anonymous memory(contains no ds)
 |-- uvm_ddb.h
 |-- uvm_device.c
 |-- uvm_device.h
