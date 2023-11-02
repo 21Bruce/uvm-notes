@@ -77,6 +77,7 @@
             7. size - size of interest
 |-- uvm_glue.c
 |-- uvm_glue.h
+    * Defines two function prototypes and no ds. More explanation in uvm_glue.c
 |-- uvm_init.c
 |-- uvm_io.c
 |-- uvm_km.c
