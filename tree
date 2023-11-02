@@ -14,7 +14,7 @@
 		  an interface(struct of function pointers) and some state
 		  data(max and min addrs). The interface has a few methods
 		  for selecting, freeing, and printing addresses. There are
-		  4 different selectors atm:
+		  5 different selectors atm:
 			1. uaddr_lin: unsure, disabled by default
 			2. uaddr_rnd: random algo addrs
 			3. uaddr_bestfit: bestfit algo addrs
@@ -43,6 +43,46 @@
 |-- uvm_km.h
 |-- uvm_map.c
 |-- uvm_map.h
+    * Contains prototypes of vm_map and vm_map_entry ds and funcs
+        - Vm_map_entries are structures containing entries in a vm_map.
+            1. Entries are stored in a red-black tree for userland processes
+               and a singly linked list for the kernel
+            2. NOTE: What is dfree?
+            3. Entries contain the start and end virtual addresses they cover,
+               the amount of guard and free space, a backing uvm_object or sub_map
+               and the offset into this backing store, an aref for anonymous memory
+               handling, flags indicating proection, inheritance, whether the memory 
+               is wired or not, advice, and other flag types. We also have the entry type,
+               which uses the 'ETYPE' macros in uvm.h.
+            4. NOTE: What is fspace_augment?
+        - Vm_maps are rbtrees of free space and map entries
+            1. uvm_map_addr - red black tree of entries sorted by address.
+            2. NOTE: what is sserial and wserial?
+            3. pmap - The physical map interface used by this vm_map
+            4. size - size of space covered by map 
+            5. ref_count - # of processes that need this map 
+            6. flags 
+                i.    VM_MAP_PAGEABLE      - entries are pageable
+                ii.   VM_MAP_INTRSAFE      - entries are interrupt safe
+                iii.  VM_MAP_WIREFUTURE    - wire future entries 
+                iv.   VM_MAP_BUSY          - map is busy 
+                v.    VM_MAP_WANTLOCK      - want to write-lock 
+                vi.   VM_MAP_GUARDPAGES    - add guard pages to map  
+                vii.  VM_MAP_ISVMSPACE     - map is a vmspace
+                viii. VM_MAP_SYSCALL_ONCE  - libc syscall registered ? 
+            7. timestamp - version number added after each change to signal when
+               certain ops must restart 
+            8. min/max offset - first and last addr over map entries
+            9. b_start/b_end - beginning and end address for brk/heap allocation
+           10. s_start/s_end - beginning and end address for stack allocation
+           11. busy - point to the process holding busy on this map(can be NULL)
+           12. uaddr_exe - address selector for the executable pages of memory. Used if protX
+               is selected, or 'the pointer is not NULL'?
+           13. uaddr_any - if the criteria for uaddr_exe is not fulfilled, these selectors
+               are tried in the order they appear
+           14. uaddr_brk_stack - selector for brk/stack area
+           15. lock/mtx - rwlock which is non-interrupt safe and mtx which is interrupt safe.
+           16. flags_lock - mutex for flags.
 |-- uvm_meter.c
 |-- uvm_mmap.c
 |-- uvm_object.c
