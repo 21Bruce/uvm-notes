@@ -61,6 +61,20 @@
 |-- uvm_extern.h
 |-- uvm_fault.c
 |-- uvm_fault.h
+    * Contains the arguments to the fault handler and fault func prototypes, though
+      unsure how these are connected to eachother
+        - 3 types of faults
+            1. VM_FAULT_INVALID - invalid mapping
+            2. VM_FAULT_PROTECT - access does not match protection
+            3. VM_FAULT_WIRE    - wire mapping?  
+        - uvm_faultinfo is the argument struct to the fault handler
+            1. orig_map - the original faulting map
+            2. orig_rvaddr - original rounded addr where fault occurred 
+            3. orig_size - original size of fault
+            4. map - map, could be a submap 
+            5. mapv - map's version # 
+            6. entry - faulting entry of map 
+            7. size - size of interest
 |-- uvm_glue.c
 |-- uvm_glue.h
 |-- uvm_init.c
