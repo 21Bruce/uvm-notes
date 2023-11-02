@@ -47,6 +47,7 @@
     * Contains prototypes for a uvm anonymous object funcs, which is a backing object
       for anonymous memory(contains no ds)
 |-- uvm_ddb.h
+    * Contains print functions prototypes for DDB though unsure where those are defined
 |-- uvm_device.c
 |-- uvm_device.h
 |-- uvm_extern.h
