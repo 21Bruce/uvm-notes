@@ -188,6 +188,12 @@
 |-- uvm_pager.c
 |-- uvm_pager.h
 |-- uvm_param.h
+    * Contains machine independent virtual memory parameters. 
+        - boolean_t is defined here as an int
+        - default page size is 4096
+        - atop/ptoa - converts physical addresses to the page their in and
+                      vice versa?
+        - round_page / trunc_page - perform those operations on pages
 |-- uvm_pdaemon.c
 |-- uvm_pmap.h
 |-- uvm_pmemrange.c
