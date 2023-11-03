@@ -82,6 +82,19 @@
 |-- uvm_io.c
 |-- uvm_km.c
 |-- uvm_km.h
+    * Contains prototypes of funcs and ds for kernel virtual memory
+      management. 
+        - Uvm_km_free_page are structures that define a linked list
+          of some kind, though they don't appear to have any other
+          fields.
+        - Uvm_km_pages is a global structure for managing uvm kernel pages
+            1. mtx - a mutex protecting the global struct
+            2. lowat/hiwat - low and high address watermarks(I think this means min and max?)
+            3. free / page - I believe page is an array of addresses of kernel pages and 
+               free is how many pages are free.
+            4. freelist / freelistlen - linked list of uvm_km_free_page structs though I don't know
+               how these work.
+            5. km_proc - process that manages kernel memory?
 |-- uvm_map.c
 |-- uvm_map.h
     * Contains prototypes of vm_map and vm_map_entry ds and funcs
