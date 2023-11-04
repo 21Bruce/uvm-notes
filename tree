@@ -464,6 +464,19 @@
         - SWCLUSTPAGES and SWSLOT_BAD defined here
 |-- uvm_swap_encrypt.c
 |-- uvm_swap_encrypt.h
+    * Defines interface(func prototypes) to encrypted swap space?
+        - Unknown flags?
+            1. SWPENC_ENABLE
+            2. SWPENC_CREATED
+            3. SWPENC_DELETED
+            4. SWPENC_MAXID
+        - CTL_SWPENC_NAMES ?
+        - SWAP_KEY_EXPIRE: time after that keys expire
+        - SWAP_KEY_SIZE: 128 bit keys 
+        - swap_key struct
+            1. key      - 32 bit uint array of SWAP_KEY_SIZE, 'secret key for swap range'
+            2. refcount - 16 bit uint, 'pages that still need it' 
+        - unsure of this file???
 |-- uvm_unix.c
 |-- uvm_vnode.c
 |-- uvm_vnode.h
