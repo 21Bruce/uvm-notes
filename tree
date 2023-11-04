@@ -480,6 +480,29 @@
 |-- uvm_unix.c
 |-- uvm_vnode.c
 |-- uvm_vnode.h
+    * Contains func prototypes and ds for vnode handle into VM system
+        - uvm_vnode structure provides a handle for vnodes into UVM
+            1. u_obj - backing vm object
+            2. u_vnode - points back to owning vnode
+            3. u_flags - flags for this object, guarded by u_obj's vmobjlock
+                i. UVM_VNODE_VALID        - we are attached to the vnode
+               ii. UVM_VNODE_CANPERSIST   - we can persist after ref == 0 
+              iii. UVM_VNODE_ALOCK        - uvn_attach is locked out 
+               iv. UVM_VNODE_DYING        - final detach/terminate in progress 
+                v. UVM_VNODE_RELKILL      - uvn should be killed by releasepg
+                                            when final i/o is done 
+               iv. UVM_VNODE_WANTED       - someone is waiting for alock, dying,
+                                            or relkill to clear
+               vi. UVM_VNODE_VNISLOCKED   - underlying vnode struct is locked
+                                            (valid when DYING is true)
+              vii. UVM_VNODE_IOSYNC       - I/O sync in progress ... setter sleeps
+                                            on &uvn->u_nio 
+             viii. UVM_VNODE_IOSYNCWANTED - A process is waiting for the i/o sync to clear
+                                            so it can do i/o. 
+               ix. UVM_VNODE_WRITEABLE    - uvn has pages that are writeable
+                x. UVM_VNODE_BLOCKED      - (UVM_VNODE_ALOCK|UVM_VNODE_DYING|UVM_VNODE_RELKILL) any condition
+                                            that should block new processses from touching the vnode [set WANTED and sleep
+                                            to wait for it to clear]
 `-- uvmexp.h
 
 0 directory, 44 files
