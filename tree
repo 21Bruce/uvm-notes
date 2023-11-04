@@ -460,6 +460,8 @@
             3. allocs - tail queue of uvm_pmallocs.
 |-- uvm_swap.c
 |-- uvm_swap.h
+    * Defines interface(func prototypes) to swap space?
+        - SWCLUSTPAGES and SWSLOT_BAD defined here
 |-- uvm_swap_encrypt.c
 |-- uvm_swap_encrypt.h
 |-- uvm_unix.c
