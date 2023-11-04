@@ -402,7 +402,8 @@
         - round_page / trunc_page - perform those operations on pages
 |-- uvm_pdaemon.c
 |-- uvm_pmap.h
-    * Contains machine address mapping definitions -- machine independent section
+    * Contains prototypes and ds to describe machine address mapping definitions 
+      -- machine independent section
         - pmap_statistics is a struct allowing each machine dependent implementation
           to maintain expected statistics. They may do this anyway they choose, but are
           expected to return the statistics in this struct.
@@ -418,6 +419,45 @@
         - Other interface functions, will most likely add here if needed
 |-- uvm_pmemrange.c
 |-- uvm_pmemrange.h
+    * Contains prototypes and ds to describe and manage free physical memory 
+        - global rbtrees of vm_pages, called uvm_pmr_add and uvm_pmr_size
+        - page types
+            1. UVM_PMR_MEMTYPE_DIRTY - this page may contain random data
+            2. UVM_PMR_MEMTYPE_ZERO  - this page has been zeroed     
+            3. UVM_PMR_MEMTYPE_MAX   - array size used below
+        - uvm_pmemrange describes an address range of memory
+            1. addr     - red-black tree of free page chunks, sorted by addr, uses uvm_pmr_addr_cmp
+            2. size     - array of red-black trees of free page chunks, sorted by size, uses uvm_pmr_size_cmp. 
+                          Uses UVM_PMR_MEMTYPE_MAX for size
+            3. single   - array of tail queues of single page regions using pageq. 
+                          Uses UVM_PMR_MEMTYPE_MAX for size
+            4. low      - start of address range
+            5. high     - end of address range + 1
+            6. use      - use counter
+            7. nsegs    - current range count
+            8. uvm_pmemrange is an entry in a tail queue pmr_use sorted by use counter
+            9. uvm_pmemrange is an entry in a red-black tree pmr_addr sorted by address
+        - uvm_pmalloc is a struct containing a description of failing memory allocation.
+          there are two ways new pages become available. (1) the page daemon drops them
+          and (2) a process calls free. The buffer cache and page daemon can decide that
+          they don't have the ability to make pages available in the requested range. In that case,
+          the FAIL bit will be set. There's a possibility that a page is no longer on the queues
+          but has not yet been freed, or that a page was busy. Also, wired pages are not considered
+          for paging, so they could cause a failure that may be recoverable.
+            1. entry in a tail queue named pmq
+            2. pm_constaint/pm_size - allocation request paramters in the form of uvm_constraint range(defined in uvm_extern)
+               and pm_size of constraint range
+            3. pm_flags - state flags
+                i. UVM_PMA_LINKED - uvm_pmalloc is on list
+               ii. UVM_PMA_BUSY   - entry is busy with fpageq unlocked 
+              iii. UVM_PMA_FAIL   - page daemon cannot free pages 
+               iv. UVM_PMA_FREED  - at least one page in the range was freed 
+        - Red-black tree named uvm_pmemrange_addr of uvm_pmemranges, uses uvm_pmemrange_addr_cmp.
+        - Tail queue named uvm_pmemrange_use of uvm_pmemranges
+        - uvm_pmr_control is a struct for controlling uvm_pmemranges
+            1. addr - red-black tree of uvm_pmemranges sorted by addr
+            2. use  - tail queue of uvm_pmemranges sorted by use? 
+            3. allocs - tail queue of uvm_pmallocs.
 |-- uvm_swap.c
 |-- uvm_swap.h
 |-- uvm_swap_encrypt.c
