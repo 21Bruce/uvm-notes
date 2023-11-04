@@ -402,6 +402,20 @@
         - round_page / trunc_page - perform those operations on pages
 |-- uvm_pdaemon.c
 |-- uvm_pmap.h
+    * Contains machine address mapping definitions -- machine independent section
+        - pmap_statistics is a struct allowing each machine dependent implementation
+          to maintain expected statistics. They may do this anyway they choose, but are
+          expected to return the statistics in this struct.
+            1. resident_count - # of pages mapped total
+            2. wired_count    - # of pages wired
+        - flags passed to pmap_enter. Note the bottom 3 bits are PROT_* bits, used to
+          indicate the access typw that was made (to seed modified and referenced 
+          information).
+            1. PMAP_WIRED   - wired mapping
+            2. PMAP_CANFAIL - can fail if resource shortage
+            3. PMAP_MDN     - machine dependent flags with N in {0, ..., 3} 
+            4. PMAP_WC      - unknown?
+        - Other interface functions, will most likely add here if needed
 |-- uvm_pmemrange.c
 |-- uvm_pmemrange.h
 |-- uvm_swap.c
