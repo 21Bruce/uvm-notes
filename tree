@@ -141,6 +141,42 @@
 |-- uvm_mmap.c
 |-- uvm_object.c
 |-- uvm_object.h
+    * Defines the prototypes and ds of the uvm_object module. 
+        - uvm_objects represent a list of pages, which are managed by
+          the object's pager. All pages that belong to an
+          object are protected using it's lock.
+            1. vmobjlock -  The lock may be shared amongst uvm objects. Lock
+                            sharing is usually used when there is an undelrying object. 
+                            For example. vnode representing a file may have an underlying
+                            node, which is the case for tmpfs and layered file systems. In such a case, 
+                            vnode's UVM object and the underlying UVM object shares the lock.
+            2. pg_ops    - uvm_pager or this object's pages                  
+            3. memt      - red-black tree of vm_pages of this object 
+            4. uo_npages - # of pages in memt 
+            5. uo_refs   - reference count for this object. The reference count is managed atomically for 
+                           the anonymous UVM objects. For other objects. it is arbitrary 
+                           (may use the lock or atomics).
+        - UVM_OBJ_KERN is a 'special' uo_refs values which indicates that the object is a kernel memory
+          object rather than a normal one (kernel memory objects don't have reference counts -- they
+          never die). this value is used to detect kernel object mappings at uvm_unmap() time. normally
+          when an object is unmapped its pages eventually become deactivated and then paged out and/or
+          freed. this is not useful for kernel objects... when a kernel object is unmapped we always 
+          want to free the resources associated with the mapping. UVM_OBJ_KERN allows us to decide which
+          type of unmapping we want to do. in addition, we have kernel objects which may be used in an 
+          interrupt context. these objects get their mappings entered with pmap_kenter and removed with
+          pmap_kremove, which are safe to call in interrupt context, and must be used ONLY for wired kernel
+          mappings in these objects and their associated maps.
+        - UVM_OBJ_IS_KERN_OBJECT - macro that checks if an obj is a kern obj
+        - extern const uvm_vnodeops/uvm_deviceops/pmap_pager/bufcache_pager are all the pagers
+          defined throughout uvm
+        - uvm_pagecmp - comparison function for objtree.
+        - UVM_OBJ_IS_VNODE      - macro that detects if this object is a vnode
+        - UVM_OBJ_IS_DEVICE     - macro that detects if this object is a device 
+        - UVM_OBJ_IS_VTEXT      - macro that detects if this object is a vtext
+        - UVM_OBJ_IS_AOBJ       - macro that detects if this object is a aobj
+        - UVM_OBJ_IS_PMAP       - macro that detects if this object is a pmap
+        - UVM_OBJ_IS_BUFCACHE   - macro that detects if this object is a bufcache 
+        - UVM_OBJ_IS_DUMMY      - macro that detects if this object is a dummy
 |-- uvm_page.c
 |-- uvm_page.h
     * Contains prototypes of vm_page ds and funcs
@@ -154,7 +190,7 @@
             5. pg_flags - flags
                     i. PG_BUSY          - page is locked
                    ii. PG_WANTED        - page is being waited on 
-                  iii. PG_TABLED        - page is in VP table ? 
+                  iii. PG_TABLED        - page is in VP table(believe VP stands for Virtual Page) ? 
                    iv. PG_CLEAN         - page has not been modified since being paged in 
                     v. PG_CLEANCHK      - page clean bit has been checked 
                    vi. PG_RELEASED      - page released while paging 
