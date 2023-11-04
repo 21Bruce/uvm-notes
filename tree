@@ -59,6 +59,134 @@
             3. u_device - a struct representing the device
             4. u_list - global list of device objects
 |-- uvm_extern.h
+    * Unsure, but I believe this file provides an externel interface to the kernel
+      of the uvm library.
+        - PROT_MASK         - (PROT_READ | PROT_WRITE | PROT_EXEC) mask for protection 
+        - MAP_INHERIT_MASK  - mask that can be used to find inheritance
+        - MADV_MASK         - mask for advice
+        - Flags for uvm_maps 
+            1. UVM_FLAG_FIXED      - find space
+            2. UVM_FLAG_OVERLAY    - establish overlay 
+            3. UVM_FLAG_NOMERGE    - don't merge map entries 
+            4. UVM_FLAG_COPYONW    - set copy_on_write flag 
+            5. UVM_FLAG_TRYLOCK    - fail if we cannot lock map 
+            6. UVM_FLAG_HOLE       - no backend 
+            7. UVM_FLAG_QUERY      - do everything except actual execution 
+            8. UVM_FLAG_NOFAULT    - don't fault 
+            9. UVM_FLAG_UNMAP      - unmap to make space 
+           10. UVM_FLAG_STACK      - page may contain a stack 
+           11. UVM_FLAG_WC         - write combining 
+           12. UVM_FLAG_CONCEAL    - omit from dumps 
+           13. UVM_FLAG_SYSCALL    - system calls allowed 
+           14. UVM_FLAG_SIGALSTACK - sigalstack validation required 
+        - Macros to extract/put flag info in map(from and to flags entry)
+            1. UVM_PROTECTION    (flags)    - extract protection info using PROT_MASK
+            2. UVM_INHERIT       (flags)    - extract inherit info using MAP_INHERIT_MASK
+            3. UVM_MAXPROTECTION (flags)    - extract maximum protection using PROT_MASK
+            4. UVM_ADVICE        (flags)    - extract advice using MADV_MASK 
+            5. UVM_MAPFLAG                  - take prot, maxprot, inheritance, advice, and other flags
+                                              and create a flag bit array for use in map 
+        - UVM_UKNOWN_OFFSET - offset not known to object
+        - uvm_km_kmemalloc flags 
+            1. UVM_KMF_NOWAIT   - matches M_NOWAIT
+            2. UVM_KMF_VALLOC   - allocate VA only(VA?) 
+            3. UVM_KMF_CANFAIL  - caller handles failure 
+            4. UVM_KMF_ZERO     - zero pages 
+            5. UVM_KMF_TRYLOCK  - try locking only 
+        - uvm_pagealloc flags 
+            1. UVM_PGA_USERESERVE - ok to use reserve pages
+            2. UVM_PGA_ZERO       - returned page must be zeroed 
+        - uvm_pglistalloc/uvm_pmr_getpages flags 
+            1. UVM_PLA_WAITOK       - may sleep
+            2. UVM_PLA_NOWAIT       - will not sleep(need this or above, not both)
+            3. UVM_PLA_ZERO         - zero all pages before returning
+            4. UVM_PLA_TRYCONTIG    - try to allocate contig physmem
+            5. UVM_PLA_FAILOK       - caller will handle failures 
+            6. UVM_PLA_NOWAKE       - do not wake pagedaemon on failure 
+            7. UVM_PLA_USERESERVE   - can allocate from kernel reserve memory 
+        - lockfalgs that control locking behaviour for some functions
+            1. UVM_LK_ENTER - map locked on entry
+            2. UVM_LK_EXIT  - leave map locked on exit 
+        - flags to uvm_page_physload
+            1. PHYSLOAD_DEVICE - don't add to the page queue 
+        - vmspace is a struct representing a shareable process virtual
+          address space. May eventually be merged with vm_map.
+          several fields are temporary. 
+            1. vm_map           - this space's vm_map
+            2. vm_refcnt        - reference count, protected by kernel lock 
+            3. vm_shm           - SYS5 shared memory of private data 
+            4. vm_rssize        - current resident size in pages 
+            5. vm_swrss         - resident set size before last swap 
+            6. vm_tsize         - text size in pages 
+            7. vm_dsize         - data size in pages 
+            8. vm_dused         - data segment length in pages 
+            9. vm_ssize         - stack size in pages, protected by vm_map lock
+           10. vm_taddr         - user virtual address of text, immutable
+           11. vm_daddr         - user virtual address of data, immutable
+           12. vm_maxsaddr      - user VA at max stack growth 
+           13. vm_minsaddr      - user VA at top of stack 
+           14. vm_execve        - execve systemcall stub region, protected by vm_map lock
+           15. vm_execve_end    - execve systemcall stub region end, protected by vm_map lock
+        - uvm_constraint_range are structures that allow MD code to setup constraint ranges for 
+          memory allocators, the primary use for this is to keep allocation for certain memory
+          consumers such as mbuf pools within address ranges that are reachable by devices that
+          perform DMA. It is alos to discourage memory allocations from being satisfied from ranges
+          such as the ISA memory range, if they can be satisfied with allocation from other ranges.
+            1. ucr_low  - low constraint
+            2. ucr_high - high constraint
+        - md-code defined external constraint ranges
+            1. isa_constraint       - constraint range for ISA memory
+            2. dma_constraint       - constraint range for DMA memory
+            3. no_constraint        - no constraint? 
+            4. uvm_md_constraints   - array of constraints, not sure? 
+        - kernel maps owned by md code, defined externally (unsure about these)
+            1. exec_map 
+            2. kernel_map
+            3. kmem_map
+            4. phys_map
+        - kmem_va_mode is a struct defining the allocation mode for a virtual space
+            1. kv_map        - pinter to the ponter the the map we're allocating from
+            2. kv_align      - alignment
+            3. kv_wait       - wait for free space in the map if it's full. The default
+                               allocators don't wait since running out of space in kernel_map and 
+                               kmem_map is usually fatal. Special maps like exec_map are specifically
+                               limited, so waiting for space in them is necessary
+            4. kv_singlepage - use the single page allocator
+            5. kv_executable - map the physical pages with PROT_EXEC 
+        - kmem_pa_mode is a struct defining the allocation mode for a physical pages 
+            1. kp_constraint - allocation constraint for physical pages
+            2. kp_object     - if the pages should be allocated from an object
+            3. kp_align      - physical alignment of the first page in the allocation 
+            4. kp_boundary   - boundary that the physical addresses can't cross if the allocation is 
+                               contiguous 
+            5. kp_nomem      - don't allocate any backing pages
+            6. kp_maxseg     - maximal amount of contiguous segments
+            7. kp_zero       - zero the returned memory
+            8. kp_pageable   - allocated pageable memory
+        - kmem_dyn_mode is a struct holding dynamic allocation paramters. Stuff that changes too often or too
+          much to create separate va and pa modes for. 
+            1. kd_prefer   - offset to fee to PMAP_PREFER
+            2. kd_waitok   - is it ok to sleep?
+            3. kd_trylock  - don't sleep on map locks 
+            4. kd_slowdown - special parameter for the singlepage va allocator that tells
+                             the caller to sleep if possible to let the singlpage allocator
+                             allocator catch up. 
+        - extern defs for kmem_va_mode
+            1. kv_any
+            2. kv_intrsafe
+            3. kv_page
+        - extern defs for kmem_pa_mode
+            1. kp_dirty
+            2. kp_zero
+            3. kp_dma
+            4. kp_dma_contig
+            5. kp_dma_zero
+            6. kp_pageable
+            7. kp_none
+        - extern defs for kmem_dyn_mode
+            1. kd_waitok
+            2. kd_nowait
+            3. kd_trylock
 |-- uvm_fault.c
 |-- uvm_fault.h
     * Contains the arguments to the fault handler and fault func prototypes, though
