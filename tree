@@ -179,14 +179,56 @@
            10. mdpage - machine dependent physical map page data
            11. owner/owner_tag - debugging fields for tracking which thread is using which page
         - Vm_physseg structures describe a physical memory segment
-            1. start/end - PF# of first and (last + 1) page in segment (PF#?)
-            2. avail_start/avail_end - PF# of first and (last + 1) free page in segment (PF#?)
+            1. start/end - PF# of first and (last + 1) page in segment (PF? I think this stands for Page Frame)
+            2. avail_start/avail_end - PF# of first and (last + 1) free page in segment 
             3. pgs - vm_page structures matching each page from the start
             4. lastpg - vm_page structure matching the last page
         - Vm_page_zero_enable ?(defined externally)
         - Vm_physmem ?(defined externally)
 |-- uvm_pager.c
 |-- uvm_pager.h
+    * Contains definition of uvm_pager interface
+        - uvm_pagerops is a struct defining the operations a page
+          must implement
+            1. pgo_init         - void(void) func that inits the pager
+            2. pgo_reference    - void(uvm_object) func that adds a ref to a uvm object 
+            3. pgo_detach       - void(uvm_object) func that drops a ref to a uvm object 
+            4. pgo_fault        - int(uvm_faultinfo *, ...) func that, if present, is used to
+                                  perform specialized fault handling. Returns a status code 
+                                  described below
+            5. pgo_flush        - boolean_t(uvm_object, ...) func that flushes a page out of an object 
+            6. pgo_get          - int(uvm_object, ...) func that gets/read page out of an object 
+            7. pgo_put          - int(uvm_object, ...) func that put/writes page into an object 
+            8. pgo_cluster      - void(uvm_object, ...) func that returns range of a cluster ?
+            9. pgo_mk_pcluster  - vm_page**(uvm_object, ...) func that returns a "put" cluster?
+        - flags for pager(mostly flush op)
+            1. PGO_CLEANIT     - write dirty pages ot backing store
+            2. PGO_SYNCIO      - if PGO_CLEANIT use sync I/O
+            3. PGO_DEACTIVATE  - deactivate flushed pages 
+            4. PGO_FREE        - free flushed pages 
+            5. PGO_ALLPAGES    - flush whole object/get all pages
+            6. PGO_DOACTCLUST  - flag to make mk_pcluster to include active pages 
+            7. PGO_LOCKED      - fault data structures are locked [used for get]
+            8. PGO_PDFREECLUST - daemon's free cluster flag [used for put]
+            9. PGO_REALLOCSWAP - reallocate swap area [used for dropcluster?] 
+           10. PGO_NOWAIT      - do not wait for inode lock
+           11. PGO_DONTCARE    - for pages we are not interested in getting, used in get only 
+        - flags to uvm_pagermapin
+            1. UVMPAGER_MAPIN_WAITOK - allow waiting
+            2. UVMPAGER_MAPIN_READ   - host <- device ? 
+            3. UVMPAGER_MAPIN_WRITE  - device -> host (pseudo flag) ? 
+        - get/put return values
+            1. VM_PAGER_OK      - operation was successful 
+            2. VM_PAGER_BAD     - specified data was out of the accepted range 
+            3. VM_PAGER_FAIL    - specified data was in range, but doesn't exist 
+            4. VM_PAGER_PEND    - operations was initiated but not completed 
+            5. VM_PAGER_ERROR   - error while accessing data that is in range and exists 
+            6. VM_PAGER_AGAIN   - temporary resource shortage prevented operation from happening 
+            7. VM_PAGER_UNLOCK  - unlock the map and try again 
+            8. VM_PAGER_REFAULT - [uvm_fault internal use only!] unable to relock data structures,
+                                  thus the mapping needs to be reverified before we can proceed 
+        - PAGER_MAP_SIZE - needed until the device strategy interface has changed to do physically addressed
+                           I/O?
 |-- uvm_param.h
     * Contains machine independent virtual memory parameters. 
         - boolean_t is defined here as an int
