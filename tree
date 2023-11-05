@@ -491,18 +491,155 @@
                iv. UVM_VNODE_DYING        - final detach/terminate in progress 
                 v. UVM_VNODE_RELKILL      - uvn should be killed by releasepg
                                             when final i/o is done 
-               iv. UVM_VNODE_WANTED       - someone is waiting for alock, dying,
+               vi. UVM_VNODE_WANTED       - someone is waiting for alock, dying,
                                             or relkill to clear
-               vi. UVM_VNODE_VNISLOCKED   - underlying vnode struct is locked
+              vii. UVM_VNODE_VNISLOCKED   - underlying vnode struct is locked
                                             (valid when DYING is true)
-              vii. UVM_VNODE_IOSYNC       - I/O sync in progress ... setter sleeps
+             viii. UVM_VNODE_IOSYNC       - I/O sync in progress ... setter sleeps
                                             on &uvn->u_nio 
-             viii. UVM_VNODE_IOSYNCWANTED - A process is waiting for the i/o sync to clear
+               ix. UVM_VNODE_IOSYNCWANTED - A process is waiting for the i/o sync to clear
                                             so it can do i/o. 
-               ix. UVM_VNODE_WRITEABLE    - uvn has pages that are writeable
-                x. UVM_VNODE_BLOCKED      - (UVM_VNODE_ALOCK|UVM_VNODE_DYING|UVM_VNODE_RELKILL) any condition
+                x. UVM_VNODE_WRITEABLE    - uvn has pages that are writeable
+               xi. UVM_VNODE_BLOCKED      - (UVM_VNODE_ALOCK|UVM_VNODE_DYING|UVM_VNODE_RELKILL) any condition
                                             that should block new processses from touching the vnode [set WANTED and sleep
                                             to wait for it to clear]
 `-- uvmexp.h
+    * Contains parts of UVM that can be exported, i.e. sysctl hooks
+        - CTL_VM IDs
+            1. VM_METER         - struct vmmeter
+            2. VM_LOADAVG       - struct loadavg 
+            3. VM_PSSTRINGS     - PSSTRINGS
+            4. VM_UVMEXP        - struct uvmexp 
+            5. VM_SAWPENCRYPT   - int
+            6. VM_NKMEMPAGES    - int - # kmem_map pages
+            7. VM_ANONMIN       - ?
+            8. VM_VTEXTMIN      - ?
+            9. VM_VNODEMIN      - ?
+           10. VM_MAXSLP        - ?
+           11. VM_USPACE        - ?
+           12. VM_MALLOC_CONF   - config for userland malloc 
+           13. VM_MAXID         - number of valid vm ids 
+        - uvmexp is a struct containing global data structures that are exported to parts of
+          the kernel other than the vm system
+            1. vm_page constants fields
+                i. pagesize     - size of a page, must be power of 2
+               ii. pagemask     - page mask 
+              iii. pageshift    - page shift 
+            2. vm_page counters fields
+                i. npages               - number of pages we manage, immutable
+               ii. free                 - number of free pages, protected by uvm_lock_fpageq 
+              iii. active               - number of active pages
+               iv. inactive             - number of pages that we free'd but may want back 
+                v. paging               - number of pages in the process of being paged out 
+               vi. wired                - number of wired pages 
+              vii. zeropages            - number of zero'd pages, protected by uvm_lock_fpageq 
+             viii. reserve_pagedaemon   - number of pages reserved for pagedaemon 
+               ix. reserve_kernel       - number of pages reserved for kernel     
+                x. unused01             - formerly anonpages     
+               xi. vnodepages           - # of pages used by vnode page cache     
+              xii. vtextpages           - # of pages used by vtext vnodes         
+            3. pageout params fields
+                i. freemin      - min number of free pages
+               ii. freetarg     - target number of free pages
+              iii. inactarg     - target number of inactive pages
+               iv. wiredmax     - max number of wired pages 
+                v. anonmin      - min threshold for anon pages 
+               vi. vtextmin     - min threshold for vtext pages
+              vii. vnodemin     - min threshold for vnode pages
+             viii. anonminpct   - min percent anon pages       
+               ix. vtextminpct  - min percent vtext pages      
+                x. vnodeminpct  - min percent vnode pages      
+            4. swap fields           
+                i. nswapdev     - number of configured swap devices in system, protected by uvm_swap_data lock
+               ii. swpages      - number of PAGE_SIZE'ed swap pages in system, protected by uvm_swap_data lock
+              iii. swpginuse    - number of swap pages in use, protected by kernel lock 
+               iv. swpgonly     - number of swap pages in use, not also in RAM, protected by atomic operations
+                v. nswget       - number of swap pages moved from disk to RAM, protected by atomic operations
+               vi. nanon        - number of total anon's in system
+              vii. unused05     - formerly nanonneeded 
+             viii. unused06     - formerly nfreeanon   
+            5. stat counters fields  
+                i. faults           - page fault count
+               ii. traps            - trap count      
+              iii. intrs            - interrupt count 
+               iv. swtch            - context switch count
+                v. softs            - software interrupt count
+               vi. syscalls         - system calls            
+              vii. pageins          - pagine operation count  
+             viii. unused07         - formerly obsolete_swapins
+               ix. unused08         - formerly obsolete_swapouts
+                x. pgswapin         - pages swapped in
+               xi. pgswapout        - pages swapped out
+              xii. forks            - forks
+             xiii. forks_ppwait     - forks where parent waits
+              xiv. forks_sharevm    - forks where vmspace is shared
+               xv. pga_zerohit      - pagealloc where zero wanted and zero was available
+              xvi. pga_zeromiss     - pagealloc where zero wanted and zero not available
+             xvii. unused09         - formerly zeroaborts
+            6. fault subcounters 
+                i. fltnoram     - number of times fault was out of ram
+               ii. fltnoanon    - number of times fault was out of anons 
+              iii. fltnoamap    - number of times fault was out of amap chunks
+               iv. fltpgwait    - number of times fault had to wait on a page 
+                v. fltpgrele    - number of times fault found a released page 
+               vi. fltrelck     - number of times fault relock called         
+              vii. fltrelckok   - number of times fault relock is a success   
+             viii. fltanget     - number of times fault gets anon page        
+               ix. fltanretry   - number of times fault retrys an anon get    
+                x. fltamcopy    - number of times fault clears "needs copy"   
+               xi. fltnamap     - number of times fault maps a neighbor anon page
+              xii. fltnomap     - number of times fault maps a neighbor obj page
+             xiii. fltlget      - number of times fault does a locked pgo_get   
+              xiv. fltget       - number of times fault does an unlocked get   
+               xv. flt_anon     - number of times fault anon (case 1a)         
+              xvi. flt_acow     - number of times fault anon cow (case 1b)
+             xvii. flt_obj      - number of times fault is on object page (2a)
+            xviii. flt_prcopy   - number of times fault promotes with copy (2b)
+              xix. flt_przero   - number of times fault promotes with zerofill (2b)
+            7. daemon counters 
+                i. pdwoke       - number of times daemon woke up
+               ii. pdrevs       - number of times daemon rev'd clock hand 
+              iii. pdswout      - number of times daemon called for swapout 
+               iv. pdfreed      - number of times daemon freed since boot 
+                v. pdscans      - number of times daemon scanned since boot
+               vi. pdanscan     - number of anonymous pages scanned by daemon 
+              vii. pdobscan     - number of object pages scanned by daemon 
+             viii. pdreact      - number of pages daemon reactivated since boot
+               ix. pdbusy       - number of times daemon found a busy page     
+                x. pdpageouts   - number of times daemon started a pageout     
+               xi. pdpending    - number of times daemon got a pending pageout 
+              xii. pddeact      - number of times daemon deactivates           
+             xiii. unused11     - formerly pdreanon                            
+              xiv. unused12     - formerly pdrevnode                           
+             xiiv. unused13     - formerly pdrevtext                           
 
+            8. fpswtch - FPU context switch
+            9. kmapent - number of kernel map entries
+        - _ps_strings is a struct for I'm assuming the PSSTRINGS VM_CTL flag above
+            1. val - void* with uknown purpose ?
+        - uvm_exp_counters is an enum denoting counter types
+            1. stat counters
+                i. faults   - page fault count
+               ii. pageins  - pagein operation count 
+            2. fault subcounters
+                i. fltnoram     - number of times fault was out of ram
+               ii. fltnoanon    - number of times fault was out of anons 
+              iii. fltnoamap    - number of times fault was out of amap chunks
+               iv. fltpgwait    - number of times fault had to wait on a page 
+                v. fltpgrele    - number of times fault found a released page 
+               vi. fltrelck     - number of times fault relock called         
+              vii. fltrelckok   - number of times fault relock is a success   
+             viii. fltanget     - number of times fault gets anon page        
+               ix. fltanretry   - number of times fault retrys an anon get    
+                x. fltamcopy    - number of times fault clears "needs copy"   
+               xi. fltnamap     - number of times fault maps a neighbor anon page
+              xii. fltnomap     - number of times fault maps a neighbor obj page
+             xiii. fltlget      - number of times fault does a locked pgo_get   
+              xiv. fltget       - number of times fault does an unlocked get   
+               xv. flt_anon     - number of times fault anon (case 1a)         
+              xvi. flt_acow     - number of times fault anon cow (case 1b)
+             xvii. flt_obj      - number of times fault is on object page (2a)
+            xviii. flt_prcopy   - number of times fault promotes with copy (2b)
+              xix. flt_przero   - number of times fault promotes with zerofill (2b)
+        3. exp_ncounters - no meaning given ?
 0 directory, 44 files
