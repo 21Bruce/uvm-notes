@@ -288,10 +288,19 @@
                 x. UVM_ET_SYSCALL       - syscall text segment
                xi. UVM_ET_IMMUTABLE     - entry may not be changed 
               xii. UVM_ET_FREEMAPPED    - map entry is on free list (DEBUG)
-        - NOTE: VMMAP_FREE_START and VMMAP_FREE_END give the starting and ending addresses of free space
-                in an entry. These defs show that this can be derived from adding the guard to the end
-                address and adding the guard and fspace to the end respectfully, so the start and end
-                is what is currently allocated by the entry (ALL OF THIS COPIED FROM uvm.h DESC)
+                - NOTE: VMMAP_FREE_START and VMMAP_FREE_END give the starting and ending addresses of free space
+                        in an entry. These defs show that this can be derived from adding the guard to the end
+                        address and adding the guard and fspace to the end respectfully, so the start and end
+                        is what is currently allocated by the entry (ALL OF THIS COPIED FROM uvm.h DESC)
+           10. protection     - protection code
+           11. max_protection - max protection code
+           12. inheritance    - inheritance type
+           13. wired_count    - how many processes need this wired or how many pages are wired, unsure?
+           14. advice         - madvise code
+           15. flags          - flags for this object
+                i. UVM_MAP_STATIC - static map entry
+               ii. UVM_MAP_KMEM   - from kmem entry pool
+           16. fspace_augment - max fspace in subtree
         - Vm_maps are rbtrees of free space and map entries
             1. uvm_map_addr - red black tree of entries sorted by address.
             2. NOTE: what is sserial and wserial?
