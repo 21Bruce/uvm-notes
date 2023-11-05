@@ -39,7 +39,7 @@
 |-- uvm_addr.c
 |-- uvm_addr.h
 	* Contains prototypes of uvm addr selector funcs and ds
-		- Addr selectors are different algorithms that decide where
+		- NOTE: Addr selectors are different algorithms that decide where
 		  to put addresses. They are defined by a struct containing 
 		  an interface(struct of function pointers) and some state
 		  data(max and min addrs). The interface has a few methods
@@ -52,6 +52,18 @@
 			5. uaddr_stack_brk: selector for the stack/heap section
 		  Also has selectors for kernel bootstrap, which uses an RBTree 
 	      for something.
+        - uvm_addr_state captures basic state of selectors
+            1. uaddr_minaddr    - min address in selection range (page-aligned)
+            2. uaddr_maxaddr    - max address in selection range (page-aligned)
+            3. uaddr_functions  - interface that all selectors must implement
+        - uvm_addr_functions describes the interface all selectors implement
+            1. uaddr_select      - an address selection algorithm
+            2. uaddr_free_insert - a freelist insertion function(optional)
+            3. uaddr_free_remove - a freelist deletion function(optional)
+            4. uaddr_destroy     - a destructor for the algorithm state
+            5. uaddr_print       - print function for debugging
+            6. uaddr_name        - cstring name of allocator
+        - uaddr_free_rbtree is defiend and prototyped here(see uvm_map.h).
 |-- uvm_amap.c
 |-- uvm_amap.h
     * Contains forward declaration of uvm amap and prototype of functions, but
