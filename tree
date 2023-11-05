@@ -1,11 +1,41 @@
 /usr/src/sys/uvm
 |-- uvm.h 
 	* Contains global uvm state data
-		- Queue and locks(mutex) for active/inactive and free pages
-		- State for pagedaemon and async io tasks
-		- Bool indicating when init has completed
-		- Entity type bits for indicating properties of map entries
+        - uvm struct contains global state data
+            1. page_active      - queue of allocated pages in use, protected by uvm.pageqlock 
+            2. page_inactive    - queue of inactive pages, protected by uvm.pageqlock 
+            3. pageqlock        - mutex protecting page queues above 
+            4. fpageqlock       - mutex protecting free page queue and pdaemon 
+            5. page_init_done   - bool indicating if uvm_page_init() is finished
+            6. pmr_control      - pmemrange data(see uvm_pmemrange.h desc)
+            7. pagedaemon       - flag that triggers page daemon 
+            8. pagedaemon_proc  - pagedaemon's pid 
+            9. aidoned          - flag that triggers an async I/O daemon I believe
+           10. aidoned_proc     - async I/O pid
+           11. aidoned_lock     - mutex protecting async I/O daemon(specifically aio_done field below)
+           12. kentry_free      - singly linked list head of free page pool.
+           13. aio_done         - tail queue of buffers for finished async i/o requests.
+                                  protected by aiodoned_lock.
+           14. kernel_object    - uvm object that backs anonymous kernel memory usage
+	    - Entry type bits for indicating properties of map entries
+            1. UVM_ET_OBJ           - it is a uvm_object
+            2. UVM_ET_SUBMAP        - it is a vm_map submap
+            3. UVM_ET_COPYONWRITE   - copy_on_write      
+            4. UVM_ET_NEEDSCOPY     - needs_copy         
+            5. UVM_ET_HOLE          - no backend         
+            6. UVM_ET_NOFAULT       - don't fault        
+            7. UVM_ET_STACK         - this is a stack    
+            8. UVM_ET_WC            - write combining    
+            9. UVM_ET_CONCEAL       - omit from dumps    
+           10. UVM_ET_SYSCALL       - syscall text segment
+           11. UVM_ET_IMMUTABLE     - entry may not be changed 
+           12. UVM_ET_FREEMAPPED    - map entry is on free list (DEBUG)
+        - UVM_ET_ISX - macros for each of the above, with X in {OBJ, ..., CONCEAL}
 		- Some uvm_addr decls(unsure if these should be here)
+        - NOTE: VMMAP_FREE_START and VMMAP_FREE_END give the starting and ending addresses of free space
+                in an entry. These defs show that this can be derived from adding the guard to the end
+                address and adding the guard and fspace to the end respectfully, so the start and end
+                is what is currently allocated by the entry 
 |-- uvm_addr.c
 |-- uvm_addr.h
 	* Contains prototypes of uvm addr selector funcs and ds
@@ -227,16 +257,41 @@
 |-- uvm_map.h
     * Contains prototypes of vm_map and vm_map_entry ds and funcs
         - Vm_map_entries are structures containing entries in a vm_map.
-            1. Entries are stored in a red-black tree for userland processes
-               and a singly linked list for the kernel
-            2. NOTE: What is dfree?
-            3. Entries contain the start and end virtual addresses they cover,
-               the amount of guard and free space, a backing uvm_object or sub_map
-               and the offset into this backing store, an aref for anonymous memory
-               handling, flags indicating proection, inheritance, whether the memory 
-               is wired or not, advice, and other flag types. We also have the entry type,
-               which uses the 'ETYPE' macros in uvm.h.
-            4. NOTE: What is fspace_augment?
+            1. daddrs - a union between a red-black tree entry (addr_entry) and
+                        a single list entry (addr_kentry). 
+                i. addr_entry   - connects this vm_map_entry to a red_black tree sorted by addrs. Used when
+                                  this entry is for a userland vm_map
+               ii. addr_kentry  - connects this vm_map_entry to an singlely linked list. Used for kernel vm_map
+                                  entries. 
+            2. dfree - a union between a red-black tree entry (rbtree), a tail queue entry (tailq), and another
+                       tail queue entry(deadq)
+                i. rbtree       - connects this vm_map_entry to a red_black tree sorted by free space size.
+               ii. tailq        - connects this vm_map_entry to a tail queue, unsure of purpose
+              iii. deadq        - connects this vm_map_entry to a tail queue, known as the dead entry queue?
+            3. start/end - start and end virtual addresses of the allocated region  
+            4. guard     - number of bytes in guard, which separates each new allocations 
+            5. fspace    - amount of free space in this entry
+            6. object    - union between a uvm_obj(ubm_object) 
+                           and sub_map(vm_map), since either can back an entry 
+            7. offset    - offset into backing object
+            8. aref      - anonymous overlay, pointer to an amap and offset into the amap
+            9. etype     - entry type
+                i. UVM_ET_OBJ           - it is a uvm_object
+               ii. UVM_ET_SUBMAP        - it is a vm_map submap
+              iii. UVM_ET_COPYONWRITE   - copy_on_write      
+               iv. UVM_ET_NEEDSCOPY     - needs_copy         
+                v. UVM_ET_HOLE          - no backend         
+               vi. UVM_ET_NOFAULT       - don't fault        
+              vii. UVM_ET_STACK         - this is a stack    
+             viii. UVM_ET_WC            - write combining    
+               ix. UVM_ET_CONCEAL       - omit from dumps    
+                x. UVM_ET_SYSCALL       - syscall text segment
+               xi. UVM_ET_IMMUTABLE     - entry may not be changed 
+              xii. UVM_ET_FREEMAPPED    - map entry is on free list (DEBUG)
+        - NOTE: VMMAP_FREE_START and VMMAP_FREE_END give the starting and ending addresses of free space
+                in an entry. These defs show that this can be derived from adding the guard to the end
+                address and adding the guard and fspace to the end respectfully, so the start and end
+                is what is currently allocated by the entry (ALL OF THIS COPIED FROM uvm.h DESC)
         - Vm_maps are rbtrees of free space and map entries
             1. uvm_map_addr - red black tree of entries sorted by address.
             2. NOTE: what is sserial and wserial?
@@ -612,7 +667,6 @@
              xiii. unused11     - formerly pdreanon                            
               xiv. unused12     - formerly pdrevnode                           
              xiiv. unused13     - formerly pdrevtext                           
-
             8. fpswtch - FPU context switch
             9. kmapent - number of kernel map entries
         - _ps_strings is a struct for I'm assuming the PSSTRINGS VM_CTL flag above
