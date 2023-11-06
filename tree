@@ -70,6 +70,72 @@
       no implementation of uvm amap. Amaps group sets of anons that are mapped
       together.
 |-- uvm_anon.c
+    * Contains implementation of the prototypes in uvm_anon.h
+        - Anons are allocated in a file static pool uvm_anon_pool
+        - (void)uvm_anon_init(void) 
+            * API method initing the anon subsystem
+            1. uvm_anon_pool is initialized here
+            2. anon_pool has a high watermark of uvmexp.free/16 
+        - (struct vm_anon *)uvm_analloc(void) 
+            * API method for allocating a new anon
+            1. gets a new anon from the global pool
+                i. an_lock = NULL
+               ii. an_ref  = 1  
+                    - process calling uvm_analloc is implicitly adding a ref
+              iii. an_page = NULL
+               iv. an_swslot = 0
+        - (void)uvm_anfree_list(struct vm_anon *, struct pglist *)
+            * API method for freeing a single anon structure
+                => anon must be removed from the amap (if anon was in an amap)  
+                => amap must be locked, if anon was owned by amap.
+                => this func may lock the pageq's
+            1. If underlying page is resident, we discard of it
+                i. If the page has PG_BUSY set, we mark it PG_RELEASED and add a ref
+                   to an_lock. Then RETURN 
+               ii. We set the page's pmap protection to none across all pmaps. This
+                   dereferences the page with respect to pmaps. 
+              iii. If the pglist is not null, we clean it(remove from backing obj, tho not free)
+                   and insret into pglist for later freeing  
+               iv. Else we just free the page
+            2. Else, we check if an_swslot is nonzero or not equal to SWSLOT_BAD, which means
+               it is not in swap, and must be removed.
+            3. Clear an_lock
+            4. Free swap resources
+            5. put page back in pool
+        - (void)uvm_anfree(struct vm_anon *) = uvm_anfree_list(struct vm_anon *, NULL)
+        - (void)uvm_anwait(void)
+            * API method for waiting for memory to become available to allocate an anon
+            1. get an anon and put it back
+        - (boolean_t)uvm_anon_pagein(struct vm_amap *, struct vm_anon *)
+            * API method for fetchin an anon's page
+                => anon msut be locked, and is unlocked at return
+                => true if pagein was aborted(occurs due to lack of RAM), false otherwise
+            1. Call uvmfault_anonget on the amap and anon, and store return value                     
+            2. If VM_PAGER_OK
+                i. Mark page as dirty(clear PAGE_CLEAN) and clear its swap_slot(uvm_swap_free)
+               ii. Clear pmap refs and set pmap protection of page to PROT_NONE(pmap_clear_reference
+                   and pmap_page_protect)
+              iii. Deactivate page(uvm_pagedeactivate)
+               iv. Release an_lock(rw_exit)
+            3. If VM_PAGER_AGAIN, return TRUE
+            4. Else, return FALSE
+        - (void)uvm_anon_dropswap(struct vm_anon *)
+            * release any swap resources from this anon.
+                => anon must be locked or have ref count of 0
+            1. if we don't have a swap slot, return
+            2. free swap slot (uvm_swap_free)
+            3. set an_swslot = 0
+        - (void)uvm_anon_release(struct vm_anon *)
+            * release an anon and its page
+                => anon should not have any references
+                => anon must be locked
+            1. Clear pmap refs and set pmap protection of page to PROT_NONE(pmap_clear_reference
+               and pmap_page_protect)
+            2. Free page (uvm_pagefree)
+            3. Save an_lock in a tmp var
+            4. Free vm_anon (uvm_anfree) 
+            5. Release an_lock (rw_exit)
+            6. Drop a ref on an_lock(rw_obj_free)
 |-- uvm_anon.h
     * Contains prototypes of uvm anon and aref funcs and ds. The data can be in the
       following states. (1) in a vm_page with no backing store allocated yet, (2)
@@ -80,7 +146,7 @@
             1. an_lock - rwlock protectnig this anon
             2. an_page - vm_page backing this anon if it is in ram 
             3. an_ref - # of processes referencing this anon 
-            4. an_swslot - Drum swap slot # ??? 
+            4. an_swslot - Drum swap slot # (used for swap space API)
         - Vm_aref is used to reference an anonymous virtual memory map(amap.h)  
             1. ar_pageoff - page offset into the anonymous map
             2. ar_amap - the backing amap 
@@ -411,7 +477,7 @@
                  xvii. PQ_SWAPBACKED    - page is part of anon or anonymous object, i.e. it is
                                           backed by swap space. 
                 xviii. PQ_ENCRYPT       - page needs encryption and decryption 
-                xviii. PG_PMAPN         - flags reserved for pmaps with N in {0, ..., 5} 
+                  xix. PG_PMAPN         - flags reserved for pmaps with N in {0, ..., 5} 
             6. pg_version - version number incrememnted whenever page is modified
             7. wire_count - number of processes/threads that need this page wired into memory
             8. phys_addr - physical address of page
