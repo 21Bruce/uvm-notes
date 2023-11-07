@@ -66,9 +66,54 @@
         - uaddr_free_rbtree is defiend and prototyped here(see uvm_map.h).
 |-- uvm_amap.c
 |-- uvm_amap.h
-    * Contains forward declaration of uvm amap and prototype of functions, but
-      no implementation of uvm amap. Amaps group sets of anons that are mapped
-      together.
+    * Split into machine dependent and machine independent parts. Contains
+      prototypes and ds for uvm_amaps. vm_amaps are meant to be indirectly accessed,
+      i.e. only use API funcs on the struct. 
+        - UVM_AMAP_PPREF 
+            1.enable to track split references so that we don't lose
+              track of reference during partial unmaps
+        - API flags
+            1. AMAP_SHARED  - amap is shared    
+            2. AMAP_REFALL  - used in amap_ref, reference an entire amap
+            3. AMAP_SWAPOFF - used in amap_swap_off is in progress 
+        - vm_amap_chunk is a structure for managing vm_anons in an amap
+          Entries in a vm_amap are called slots. The slots of an amap are clustered into
+          chunks of UVM_AMAP_CHUNK slots each. Every chunk contains an array of pointers to 
+          vm_anon, and a bitmap is used to represent which of the slots are in use. 
+            1. Is an entry in a tail queue called ac_list
+            2. ac_baseslot - starting position in amap for anons
+            3. ac_usedmap  - ? 
+            4. ac_nslot    - # of slots in the chunk 
+            5. ac_anon     - array of vm_anon ptrs
+        - vm_amap is a structure representing an amap. 
+            1. am_lock  - rwlock protexting vm_amap flags
+            2. am_ref   - ref count
+            3. am_flags - flags, unsure which ? 
+            4. am_nslot - # of slots currently in map
+            5. am_nused - # of slots currently in use
+            6. am_ppref - per page reference count (only compiled in if UVM_AMAP_PPREF)
+            7. is an entry in a list called am_list
+            8. ami_impl - union of two structs representing storage type for amap
+                i. ami_normal is a struct for an amap with >UVM_AMAP_CHUNK slots.
+                    a. amn_buckets      - hash table impl
+                    b. amn_chunks       - tail queue of amn_chunks
+                    c. amn_nbuckets     - # of buckets 
+                    d. amn_ncused       - # number of chunks currently in use
+                    e. amn_hashshift    - shift count to hash slot to bucket
+               ii. ami_small is a vm_amap_chunk used when <=UVM_AMAP_CHUNK
+        - macros am_x = am_impl.ami_normal.x
+        - UVM_AMAP_LARGE/UVM_AMAP_CHUNK 
+            1. # of slots in a large map / # of slots to chunk large amaps in
+        - UVM_AMAP_SMALL(amap)          - test if amap is a small amap
+        - UVM_AMAP_SLOTIDX(slot)        - gives chunk that a slot is in
+        - UVM_AMAP_BUCKET(amap,slot)    - finds bucket for slot in amap
+        - AMAP_B2SLOT(S,B) - convert byte offset to slot
+        - AMAP_CHUNK_FOREACH(chunk, amap) - loops through each chunk in an amap
+        - AMAP_BASE_SLOT(slot) -> gets base slot for chunk that a slot is in?
+        - amap_flags(amap)  - gets flags for an amap
+        - amap_refs(amap)   - gets refs for an amap
+        - amap_lock(amap)   - locks the amap
+        - amap_unlock(amap) - unlocks the amap
 |-- uvm_anon.c
     * Contains implementation of the prototypes in uvm_anon.h
         - Anons are allocated in a file static pool uvm_anon_pool
