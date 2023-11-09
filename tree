@@ -65,6 +65,123 @@
             6. uaddr_name        - cstring name of allocator
         - uaddr_free_rbtree is defiend and prototyped here(see uvm_map.h).
 |-- uvm_amap.c
+    * Implementation of the API in uvm_amap.h
+        - Globals
+            1. Pools(they use an allocator that goes through kernel uobj to avoid infinite loop)
+                i. uvm_amap_pool         - global vm_amap pool
+               ii. uvm_small_amap_pool   - global vm_amap pool array of size UVM_AMAP_CHUNK
+                    a. An array so pools can rep differing slot sizes, i.e. uvm_small_amap_pool[i] 
+                       is a pool of small amaps that has # slots = i + 1
+              iii. uvm_amap_chunk_pool   - global vm_amap_chunk pool
+               iv. amap_small_pool_names - names for each small pool, max 9 characters
+            2. Amap List
+                i. amap_list       - global list of vm_amaps
+               ii. amap_list_lock  - rw_lock protecting amap_list 
+        - Local Functions
+            1. (vm_amap *)amap_alloc1(int slots, int waitf, int lazyalloc)
+                * Allocate an amap, but do not initialize the overlay
+                    => lock is not set
+                0.  set pwaitf = (waitf & M_WAITOK) ? PR_WAITOK : PR_NOWAIT, set chunkperbucket = 1, hashshift = 0
+                    - basically, convert memory api wait flag to pool api wait flag
+                1. find # of chunks by finding the closest multiple of UVM_AMAP_CHUNK above slots and
+                   dividing by UVM_AMAP_CHUNK 
+                2. if lazyalloc is set ***INVESTIGATE THIS: FUNC NEVER USES PROPER BUCKET COUNT***
+                    i. calculate logchunks, which is equal to floor(log_2(chunks)), or equivalently
+                       the 1 start position of the highest bit set to 1, with the 0 case being 
+                       defined to 1.
+                   ii. calculate chunkperbucket, which is the highest power of 2 less than logchunks,
+                       and hashshift, which is the number that satisfied chunkperbucket = 1 << hashshift
+                       or equivalently log_2(chunksperbucket)
+                3. after checking 2, if slots is greater than UVM_AMAP_CHUNK, allocate a regular
+                   sized amap, else allocate a small amap from the respective slot sized pool
+                   (pool_get), use pwaitf for flags, return NULL if this fails.
+                      - in small amap case or pwaitf with PR_ZERO, which zeros 
+                        the object, though unsure why not used in other case
+                4. Init amap  
+                    i. set am_lock to NULL
+                   ii. set am_ref = 1, since creation is an implicit reference
+                  iii. set am_ppref to NULL if UVM_AMAP_PPREF defined
+                   iv. set am_nslot to slots
+                    v. set am_nused to 0
+                   vi. if small amap(UVM_AMAP_SMALL), set am_small.ac_nslot to slots, return amap here
+                  vii. set am_ncused = 0
+                 viii. init the am_chunks tail queue (TAILQ_INIT)
+                   ix. set am_hashshift = hashshift 
+                    x. init am_buckets 
+                        a. find how many buckets are needed (howmany(chunks, chunkperbucket))
+                        b. allocate am_buckets array 
+                           (mallocarray(buckets, sizeof(*amap->am_buckets), M_UVMAMP, waitf | lazyalloc ? M_ZERO : 0))
+                        c. if step b alloc fails, goto step 6
+                        d. set am_nbuckets = bucket count from a
+                5. If not lazyalloc, fill buckets
+                    i. For each index i in buckets 
+                   ii. Determine number of slots n
+                        a. If we are not at last bucket us UVM_AMAP_CHUNK
+                        b. If we are at last bucket, calculate slots % UVM_AMAP_CHUNK. If
+                           this val is 0, we have enough slots for buckets * UVM_AMAP_CHUNK
+                           so set n =  UVM_AMAP_CHUNK. If not, we have exactly slots % UVM_AMAP_CHUNK
+                           left over, so these will go to the last bucket 
+                  iii. allocate the chunk (pool_get) and goto step 6 if this fails (pool_get)
+                   iv. init the chunk
+                        a. set am_buckets[i] to this chunk
+                        b. increment am_ncused
+                        c. set ac_baseslot to i * UVM_AMAP_CHUNK
+                        d. set ac_nslot to n from step ii.
+                        e. insert chunk into ac_list (TAILQ_INSERT_TAIL)
+                6. Reach here if failed
+                    i. free am_buckets (free(amap->am_buckets, M_UVMAMAP, buckets * sizeof(*amap->am_buckets)))
+                   ii. loop through am_chunks (TAILQ_FOREACH_SAFE) and free chunks (pool_put)
+                  iii. free amap (pool_put)
+                   iv. return NULL
+            2. (void)amap_list_insert(vm_amap *)
+                * Inserts an amap into am_list
+                1. lock amap list (amap_lock_list)   
+                2. insert amap (LIST_INSERT_HEAD)   
+                3. unlock amap list (amap_unlock_list)   
+            3. (void)amap_list_remove( vm_amap *)
+                * Removes an amap from am_list
+                1. lock amap list (amap_lock_list)   
+                2. remove amap (LIST_REMOVE)   
+                3. unlock amap list (amap_unlock_list)   
+            4. (vm_amap_chunk *)amap_chunk_get(vm_amap *, int slot, int create, int waitf)
+                * lookup a chunk for slot. if create is non-zero, the chunk is created if it
+                  does not exist yet
+                    => returns the chunk on success or NULL on error
+                1. If amap is a small amap, return the only chunk (UVM_AMAP_SMALL)
+                2. Else, search the chunk in list 
+                    i. find bucket for slot in amap (UVM_AMAP_BUCKET)
+                   ii. find base_slot for slot (AMAP_BASE_SLOT)
+                  iii. start at the first chunk in bucket, and traverse
+                       ac_list(TAILQ_NEXT), stopping if chunk is NULL, or the bucket
+                       for the baseslot of the current chunk is not the bucket
+                       for out slot(means we traveresed the entire bucket)(UVM_AMAP_BUCKET), 
+                       store previous chunk on each iteration. If the baseslot
+                       of the current chunk is the base slot from step ii. return this chunk.
+                3. Else, if not create, return NULL
+                4. Else, if create, make and insert a chunk for this slot                 
+                    i. Determine # of slots chunk can hold (chunk->ac_nslot)
+                        a. if amap->am_nslot - baseslot from 2.i. is greater
+                           than or equal to a UVM_AMAP_CHUNK, set # of slots to UVM_AMAP_CHUNK
+                        b. else set size to amap->am_nslot - baseslot
+                   ii. Get a newchunk from pool and use waitf as flag, return NULL if this fails(pool_get)
+                  iii. If there was not a previous chunk, this chunk is the header of a new bucket,
+                       so insert it into the back of ac_list(TAILQ_INSERT_TAIL) and set am_buckets[bucket] = newchunk
+                   iv. Else, insert newchunk in ac_list after previous chunk(TAILQ_INSERT_AFTER)
+                    v. increment am_ncused
+                   vi. set ac_baseslot to the baseslot found earlier
+                  vii. set ac_nslot to the value found in 4.i.
+                 viii. return the new chunk
+            5. (void)amap_chunk_free(vm_amap *, vm_amap_chunk *)
+                * free a chunk if amap is not small
+                1. if amap is small, return
+                2. find bucket for chunk using ac_baseslot (UVM_AMAP_BUCKET)
+                3. find next chunk(TAILQ_NEXT) and store it, denote nchunk 
+                4. if this chunk is a bucket header
+                    i. if next chunk exists and its in the bucket(UVM_AMAP_BUCKET on nchunk->baseslot),
+                       set the bucket header to the next chunk  
+                   ii. else set the bucket header to NULL
+                5. put the chunk back into the amap chunk pool (pool_put)
+                6. decrement amap->am_ncused
 |-- uvm_amap.h
     * Split into machine dependent and machine independent parts. Contains
       prototypes and ds for uvm_amaps. vm_amaps are meant to be indirectly accessed,
@@ -81,7 +198,7 @@
           chunks of UVM_AMAP_CHUNK slots each. Every chunk contains an array of pointers to 
           vm_anon, and a bitmap is used to represent which of the slots are in use. 
             1. Is an entry in a tail queue called ac_list
-            2. ac_baseslot - starting position in amap for anons
+            2. ac_baseslot - the slot # of anon located at ac_anon[0]
             3. ac_usedmap  - ? 
             4. ac_nslot    - # of slots in the chunk 
             5. ac_anon     - array of vm_anon ptrs
@@ -104,16 +221,17 @@
         - macros am_x = am_impl.ami_normal.x
         - UVM_AMAP_LARGE/UVM_AMAP_CHUNK 
             1. # of slots in a large map / # of slots to chunk large amaps in
-        - UVM_AMAP_SMALL(amap)          - test if amap is a small amap
-        - UVM_AMAP_SLOTIDX(slot)        - gives chunk that a slot is in
-        - UVM_AMAP_BUCKET(amap,slot)    - finds bucket for slot in amap
-        - AMAP_B2SLOT(S,B) - convert byte offset to slot
-        - AMAP_CHUNK_FOREACH(chunk, amap) - loops through each chunk in an amap
-        - AMAP_BASE_SLOT(slot) -> gets base slot for chunk that a slot is in?
-        - amap_flags(amap)  - gets flags for an amap
-        - amap_refs(amap)   - gets refs for an amap
-        - amap_lock(amap)   - locks the amap
-        - amap_unlock(amap) - unlocks the amap
+        - UVM_AMAP_SMALL(amap)              - test if amap is a small amap
+        - UVM_AMAP_SLOTIDX(slot)            - gives chunk that a slot is in
+        - UVM_AMAP_BUCKET(amap,slot)        - finds bucket for slot in amap
+        - AMAP_B2SLOT(S,B)                  - convert byte offset to slot
+        - AMAP_CHUNK_FOREACH(chunk, amap)   - loops through each chunk in an amap
+        - AMAP_BASE_SLOT(slot)              - gets base slot for chunk that a slot is in(nearest multiple of 
+                                              UVM_AMAP_CHUNK <= slot) 
+        - amap_flags(amap)                  - gets flags for an amap
+        - amap_refs(amap)                   - gets refs for an amap
+        - amap_lock(amap)                   - locks the amap
+        - amap_unlock(amap)                 - unlocks the amap
 |-- uvm_anon.c
     * Contains implementation of the prototypes in uvm_anon.h
         - Anons are allocated in a file static pool uvm_anon_pool
@@ -146,7 +264,7 @@
                it is not in swap, and must be removed.
             3. Clear an_lock
             4. Free swap resources
-            5. put page back in pool
+            5. put anon back in pool
         - (void)uvm_anfree(struct vm_anon *) = uvm_anfree_list(struct vm_anon *, NULL)
         - (void)uvm_anwait(void)
             * API method for waiting for memory to become available to allocate an anon
@@ -162,8 +280,7 @@
                    and pmap_page_protect)
               iii. Deactivate page(uvm_pagedeactivate)
                iv. Release an_lock(rw_exit)
-            3. If VM_PAGER_AGAIN, return TRUE
-            4. Else, return FALSE
+            3. Else, return FALSE ***I believe this should be If VM_PAGER_AGAIN, return TRUE***
         - (void)uvm_anon_dropswap(struct vm_anon *)
             * release any swap resources from this anon.
                 => anon must be locked or have ref count of 0
