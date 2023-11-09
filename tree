@@ -182,6 +182,37 @@
                    ii. else set the bucket header to NULL
                 5. put the chunk back into the amap chunk pool (pool_put)
                 6. decrement amap->am_ncused
+            6. (void)amap_lock_alloc(struct vm_amap *)
+                * allocs a lock from the amap ***NO PROTOTYPE***
+                1. alloc a lock at amap->am_lock (rw_obj_alloc)
+        - Ppref management local funcs 
+            * ppref is an optional amap feature, enabled by defining
+              UVM_AMAP_PPREF, which keeps trakc of reference counts on a per-page basis. It is managed
+              by an array of ints, which in the event of a failed allocation, will set the array to PPREF_NONE
+              and continue normal operation with ppref functionality. refs are managed in page sized chunks. 
+              For chunks of length 1(one page long), the int at that index in the array is simply the ref count + 1
+              of that page. If a contiguous group of pages has the same reference count, then at the starting page
+              index of the chunk, the int stored is equivalent to -1(ref_count + 1), and the next int is the size
+              of the chunk.
+            1. (void)pp_getreflen(int *ppref, int offset, int *refp, int *lenp)
+                * get the reference and length for a specific offset(basically by the book implementation
+                  of description above)
+                    => ppref's amap must be locked
+                1. if ppref[offset] > 0, by the above description we are dealing with a length 1 chunk
+                    i. set *refp = ppref[offset] - 1
+                   ii. set *lenp = 1 
+                2. else, this is a multi-length chunk  
+                    i. set *refp = (ppref[offset] * -1) - 1
+                   ii. set *lenp = ppref[offset + 1] 
+            2. (void)pp_setreflen(int *ppref, int offset, int ref, int len) 
+                * set the reference and length for a specific offset(basically by the book implementation
+                  of description above)
+                    => ppref's amap must be locked
+                1. if len == 1, this is a single length chunk
+                    i. set ppref[offset] == ref + 1
+                2. else this is a multi-length chunk
+                    i. set ppref[offset] = (ref + 1) * -1
+                   ii. set ppref[offset + 1] = len
 |-- uvm_amap.h
     * Split into machine dependent and machine independent parts. Contains
       prototypes and ds for uvm_amaps. vm_amaps are meant to be indirectly accessed,
