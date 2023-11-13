@@ -186,7 +186,7 @@
                 * allocs a lock from the amap ***NO PROTOTYPE***
                 1. alloc a lock at amap->am_lock (rw_obj_alloc)
         - Ppref management local funcs 
-            * ppref is an optional amap feature, enabled by defining
+            * ppref is an optional amap feature(though enabled in the source tree), enabled by defining
               UVM_AMAP_PPREF, which keeps trakc of reference counts on a per-page basis. It is managed
               by an array of ints, which in the event of a failed allocation, will set the array to PPREF_NONE
               and continue normal operation with ppref functionality. refs are managed in page sized chunks. 
@@ -213,6 +213,114 @@
                 2. else this is a multi-length chunk
                     i. set ppref[offset] = (ref + 1) * -1
                    ii. set ppref[offset + 1] = len
+        - API Functions
+            1. void(amap_init)(void)
+                * called at boot time to init global amap data structures
+                1. init uvm_amap_pool(pool_init)
+                2. set hi watermark of uvm_amap_pool to 4096 (pool_sethiwat) 
+                3. for each item in uvm_small_amap_pool, index i
+                    i. calculate size of each possible type of small pool by finding   
+                       offset of ac_anon in vm_amap and then adding i * sizeof vm_anon *
+                   ii. init a pool at i for this sized object (pool_init)
+                4. init uvm_amap_chunk pool(pool_init)
+            2. (vm_amap *)amap_alloc(vaddr_t sz, int waitf, int lazyalloc)
+                * allocate an amap to manage "sz" bytes of anonymous VM
+                    => caller should ensure sz is a multiple of PAGE_SIZE
+                    => reference count to new amap is set to one 
+                    => new amap is returned unlocked
+                1. Convert sz to slots(essentially divide by page size) (AMAP_B2SLOT)
+                2. check returned slot value for int overflow and return NULL if there is an overflow
+                3. allocate the amap (amap_alloc1)
+                4. if step 3 succeeded (i.e. amap != NULL), allocate a lock(amap_lock_alloc) and insert
+                   into global am_list(amap_list_insert)
+                5. return amap
+            3. (void)amap_free(vm_amap *)
+                * free an amap 
+                    => the amap must be unlocked
+                    => the amap should have a zero reference count and be empty
+                1. If there is an am_lock, free it(rw_obj_free)
+                2. If ppref enabled(UVM_AMAP_PPREF) and am_ppref != PPREF_NONE, free it (free)
+                3. if amap is small (UVM_AMAP_SMALL)
+                    i. free amap in pool according to nslot(pool_put)
+                4. else 
+                    i. loop through each chunk in am_chunks (TAILQ_FOREACH_SAFE) and free(pool_put) 
+                   ii. free am_buckets (free)
+                  iii. free amap (pool_put)
+            4. (void)amap_wipeout(vm_amap *)
+                * wipeout all anon's in an amap; then free the amap
+                    => Called from amap_unref, when reference count drops to zero
+                    => amap must be locked
+                1. if amap_swap_off is in progress (AMAP_SWAPOFF flag is set)
+                    * amap_swap off will call this function again, so unlock and return
+                    i. unlock amap (amap_unlock)
+                   ii. return
+                2. init a page list tail queue (TAILQ_INIT)
+                3. remove amap from am_list (amap_list_remove)
+                4. drop refs on anons, for each chunk in amap(AMAP_CHUNK_FOREACH)
+                    i. while bits are set in chunk->ac_usedmap (the bit map)
+                        q. Find first bit set, 1-based indexing (ffs)
+                        b. set slot to ii. - 1, since indices in ac_anon
+                           are 0-based. xor map with 1 right shifted by slot
+                           in order to set that bit to 0
+                        c. get anon associated with slot and decrement an_ref to drop
+                           refs
+                        d. if the ref count on the current anon is 0 after decrementing,
+                           clean anon and add it to page tail queue for later freeing (uvm_anfree_list)
+                5. Free pages in page tail queue (uvm_pglistfree)                        
+                6. destroy the amap
+                    i. set am_ref to 0
+                   ii. set am_nused to 0
+                  iii. unlock the amap (amap_unlock)
+                   iv. free the amap (amap_free)
+            5. (void)amap_copy(vm_map *map, vm_map_entry entry, int waitf, boolean_t canchunk,            
+                    vaddr_t startva, vaddr_t endva)
+                * ensure that a map entry's "needs_copy" flag is false by copying amap if necessary.
+                    => an entry with a null amap pointer will get a blank new one. 
+                    => the map that the map entry  belongs to must be locked by caller
+                    => the amap currently attached to "entry" (if any) must be unlocked
+                    => if canchunk is true, then we may clip the entry into a chunk
+                    => "startva" and "endva" are used only if canchunk is true. they are
+                        used to limit chunking (e.g. if you have large space that you know
+                        you are going to need to allocate amaps for, there is no point in
+                        allowing that to be chunked)
+                1. If entry's amap is not set(entry->aref.ar_amap == NULL), create one
+                    i. If the allocated region of the entry in pages is larger
+                       than UVM_AMAP_LARGE(atop(entry->end - entry->start) >= UVM_AMAP_LARGE).
+                       This means we have a large amap
+                        a. If canchunk is set, then we can chunk the amap
+                            1. Find chunk size in bytes (UVM_AMAP_CHUNK << PAGE_SHIFT)
+                            2. Find tightest vaddr bounds that are chunk aligned and capture
+                               start and end va.
+                                i. set startva to (startva/ chunk size) * chunksize
+                               ii. set endva to smallest multiple of chunksize >= endva (roundup)
+                            3. clip the entry to these addresses (UVM_MAP_CLIP_START) (UVM_MAP_CLIP_END)
+                        b. Else, set lazyalloc flag
+                   ii. Init and alloc amap
+                        a. set entry->aref.ar_pageoff to 0
+                        b. alloc entry->aref.ar_amap (amap_alloc(entry->end - entry->start, waitf, lazyalloc))
+                        c. if the ar_amap allocation succeded, set entry's etype UVM_ET_NEEDSCOPY flag to 0
+                  iii. return
+                2. If the underlying entry's amap has only 1 reference, no need to copy. 
+                   Note that we are reading am_ref without lock held as the value can only
+                   be one if we have the only reference to the amap.
+                    i. Set entry's etype UVM_ET_NEEDSCOPY bit to 0
+                   ii. Return
+                3. Convert entry allocated byte space to slots(in pages) (AMAP_B2SLOT(slots, entry->end - entry->start))
+                4. If amap isn't small and it's hashshift is nonzero, then it was lazy alloced, so set lazyalloc to 1
+                5. Alloc an uninitialized amap (amap_alloc1(slots, waitf, lazyalloc))(has no lock),
+                   and return if the new amap is NULL
+                6. Store entry's amap in srcmap
+                7. set the new amap's lock to srcmap's lock and obtain another ref to that lock
+                   (rw_obj_hold) and lock it (amap_lock)
+                8. we recheck the reference count after obtaining the locks in step 7. If it is at
+                   one
+                    i. Set needs copy of entry's etype to 0
+                   ii. unlock the srcamap
+                  iii. decrement the new amap's ref count so it's zero
+                   iv. free the new amap (amap_free) and return
+                9. Copy slots from srcamap into new amap
+                    i. 
+                        
 |-- uvm_amap.h
     * Split into machine dependent and machine independent parts. Contains
       prototypes and ds for uvm_amaps. vm_amaps are meant to be indirectly accessed,
@@ -229,8 +337,8 @@
           chunks of UVM_AMAP_CHUNK slots each. Every chunk contains an array of pointers to 
           vm_anon, and a bitmap is used to represent which of the slots are in use. 
             1. Is an entry in a tail queue called ac_list
-            2. ac_baseslot - the slot # of anon located at ac_anon[0]
-            3. ac_usedmap  - ? 
+            2. ac_baseslot - the slot # of associated to anon at ac_anon[0]
+            3. ac_usedmap  - bit map of which positions in ac_anon are in use 
             4. ac_nslot    - # of slots in the chunk 
             5. ac_anon     - array of vm_anon ptrs
         - vm_amap is a structure representing an amap. 
@@ -817,9 +925,9 @@
 |-- uvm_vnode.h
     * Contains func prototypes and ds for vnode handle into VM system
         - uvm_vnode structure provides a handle for vnodes into UVM
-            1. u_obj - backing vm object
-            2. u_vnode - points back to owning vnode
-            3. u_flags - flags for this object, guarded by u_obj's vmobjlock
+            1. u_obj    - backing vm object
+            2. u_vnode  - points back to owning vnode
+            3. u_flags  - flags for this object, guarded by u_obj's vmobjlock
                 i. UVM_VNODE_VALID        - we are attached to the vnode
                ii. UVM_VNODE_CANPERSIST   - we can persist after ref == 0 
               iii. UVM_VNODE_ALOCK        - uvn_attach is locked out 
@@ -838,6 +946,12 @@
                xi. UVM_VNODE_BLOCKED      - (UVM_VNODE_ALOCK|UVM_VNODE_DYING|UVM_VNODE_RELKILL) any condition
                                             that should block new processses from touching the vnode [set WANTED and sleep
                                             to wait for it to clear]
+            4. u_nio    - number of running I/O requests, guarded by u_obj's vmobjlock 
+            5. u_size   - size of object, guarded by u_obj's vmobjlock 
+            6. It is an entry in a list called u_wlist, which is a list of writeable vnode objs,
+               protected by kernel lock
+            7. It is an entry in a simple queue called u_syncq, which is a queue of vnode objs
+               due for "sync" protected by uvn_sync_lock
 `-- uvmexp.h
     * Contains parts of UVM that can be exported, i.e. sysctl hooks
         - CTL_VM IDs
